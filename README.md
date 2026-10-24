@@ -79,10 +79,20 @@ Main options (run `Il2CppDumper --help` for all of them):
 
 The other dump settings come from `config.json` next to the executable, the same file the GUI uses. The exit code is 0 on success, 1 when a dump failed and 2 for invalid arguments.
 
-To build it:
+# Building
+
+`build.ps1` builds the GUI and the CLI for 32-bit and 64-bit Windows:
 
 ```
-dotnet publish Il2CppDumper.CLI -c Release -o publish/cli
+.\build.ps1
+```
+
+Each architecture gets one folder, `publish\Il2CppDumper-<version>-<win-x86|win-x64>`, with both single-file exes (`Il2CppDumper GUI.exe` and `Il2CppDumper.exe`) sharing `config.json` and the scripts. Use the x86 build for 32-bit `GameAssembly.dll` files that need the custom PE loader. The builds need the .NET 10 runtime; `.\build.ps1 -SelfContained` bundles it into the exe instead.
+
+For Linux or macOS, publish the CLI for that platform, for example:
+
+```
+dotnet publish Il2CppDumper.CLI -c Release -r linux-x64 -p:PublishSingleFile=true -o publish/cli-linux-x64
 ```
 
 # Project structure

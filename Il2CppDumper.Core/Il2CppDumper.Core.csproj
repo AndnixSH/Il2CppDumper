@@ -4,6 +4,7 @@
 		<TargetFramework>net10.0</TargetFramework>
 		<AssemblyName>Il2CppDumper.Core</AssemblyName>
 		<RootNamespace>Il2CppDumper</RootNamespace>
+		<DebugType>embedded</DebugType>
 		<Description>Il2CppDumper core used by Il2CppDumper GUI and CLI. This is the fork of Il2CppDumper by Perfare</Description>
 		<Copyright>Copyright © AndnixSH 2024 | Original project: Perfare 2016-2024</Copyright>
 		<Authors>AndnixSH, Perfare</Authors>
