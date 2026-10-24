@@ -7,7 +7,7 @@
 		<DebugType>embedded</DebugType>
 		<!-- COM file dialogs shown when the exe is started without arguments on Windows -->
 		<BuiltInComInteropSupport>true</BuiltInComInteropSupport>
-		<ApplicationIcon>..\Il2CppDumper\il2cppdumper.ico</ApplicationIcon>
+		<ApplicationIcon>..\Assets\il2cppdumper.ico</ApplicationIcon>
 		<Description>Command-line version of Il2CppDumper GUI by AndnixSH. This is the fork of Il2CppDumper by Perfare</Description>
 		<Copyright>Copyright © AndnixSH 2024 | Original project: Perfare 2016-2024</Copyright>
 		<Title>Il2CppDumper CLI</Title>

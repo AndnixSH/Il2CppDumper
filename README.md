@@ -88,7 +88,7 @@ dotnet publish Il2CppDumper.CLI -c Release -o publish/cli
 # Project structure
 
 - `Il2CppDumper.Core`: the dumper (executable formats, metadata, dump.cs / struct / DummyDll output, APK and IPA handling), plus `config.json` and the scripts
-- `Il2CppDumper`: the GUI (WPF, Windows only)
+- `Il2CppDumper.GUI`: the GUI (WPF, Windows only)
 - `Il2CppDumper.CLI`: the command-line version (Windows, Linux and macOS)
 
 # Outputs

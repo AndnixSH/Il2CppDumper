@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.5.33627.172
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Il2CppDumper", "Il2CppDumper\Il2CppDumper.csproj", "{B6DD4E87-D002-40B0-9F1E-94DE7D71D497}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Il2CppDumper.GUI", "Il2CppDumper.GUI\Il2CppDumper.GUI.csproj", "{B6DD4E87-D002-40B0-9F1E-94DE7D71D497}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Il2CppDumper.CLI", "Il2CppDumper.CLI\Il2CppDumper.CLI.csproj", "{05938656-17EA-4CCA-B119-FBCC35DB750F}"
 EndProject

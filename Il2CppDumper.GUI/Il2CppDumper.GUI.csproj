@@ -3,6 +3,8 @@
 		<TargetFramework>net10.0-windows</TargetFramework>
 		<OutputType>WinExe</OutputType>
 		<AssemblyName>Il2CppDumper GUI</AssemblyName>
+		<!-- Keeps the Il2CppDumper namespace and resource names; the default would follow the project file name -->
+		<RootNamespace>Il2CppDumper</RootNamespace>
 		<MapFileExtensions>true</MapFileExtensions>
 		<ApplicationRevision>0</ApplicationRevision>
 		<ApplicationVersion>1.0.0.%2a</ApplicationVersion>
