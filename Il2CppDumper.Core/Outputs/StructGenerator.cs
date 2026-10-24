@@ -54,7 +54,7 @@ namespace Il2CppDumper
         public void WriteScript(string outputDir, bool skipMetadataUsage = false, int workerThreads = 0)
         {
             var json = new ScriptJson();
-            MainForm.Log($"  [struct] building name table for {metadata.typeDefs.Length} types...");
+            Logger.Log($"  [struct] building name table for {metadata.typeDefs.Length} types...");
             // 生成唯一名称
             for (var imageIndex = 0; imageIndex < metadata.imageDefs.Length; imageIndex++)
             {
@@ -68,7 +68,7 @@ namespace Il2CppDumper
                     CreateStructNameDic(typeDef);
                 }
             }
-            MainForm.Log("  [struct] resolving generic instances...");
+            Logger.Log("  [struct] resolving generic instances...");
             // 生成后面处理泛型实例要用到的字典
             foreach (var il2CppType in il2Cpp.types.Where(x => x.type == Il2CppTypeEnum.IL2CPP_TYPE_GENERICINST))
             {
@@ -85,7 +85,7 @@ namespace Il2CppDumper
                 nameGenericClassDic[typeStructName] = il2CppType;
                 genericClassStructNameDic[il2CppType.data.generic_class] = typeStructName;
             }
-            MainForm.Log("  [struct] processing methods and building signatures...");
+            Logger.Log("  [struct] processing methods and building signatures...");
             // 处理函数
             foreach (var imageDef in metadata.imageDefs)
             {
@@ -280,12 +280,12 @@ namespace Il2CppDumper
             // 处理MetadataUsage
             if (il2Cpp.Version >= 27 && skipMetadataUsage)
             {
-                MainForm.Log("  [struct] skipping metadata-usage scan (fast mode)");
+                Logger.Log("  [struct] skipping metadata-usage scan (fast mode)");
             }
             else if (il2Cpp.Version >= 27)
             {
                 var threads = workerThreads <= 0 ? Environment.ProcessorCount : workerThreads;
-                MainForm.Log($"  [struct] scanning binary data sections for metadata usages ({threads} thread(s))...");
+                Logger.Log($"  [struct] scanning binary data sections for metadata usages ({threads} thread(s))...");
                 var sectionHelper = executor.GetSectionHelper();
                 var pointerSize = (int)il2Cpp.PointerSize;
                 var is32 = il2Cpp.Is32Bit;
@@ -410,7 +410,7 @@ namespace Il2CppDumper
                 address = $"0x{x.Address:X}"
             }).ToArray();
             var jsonOptions = new JsonSerializerOptions() { WriteIndented = true, IncludeFields = true };
-            MainForm.Log("  [struct] writing script.json / stringliteral.json / il2cpp.h...");
+            Logger.Log("  [struct] writing script.json / stringliteral.json / il2cpp.h...");
             // Stream JSON directly to disk rather than building one giant in-memory
             // string. On large or protected binaries these collections can exceed the
             // ~2 GB single-string/array limit and throw OutOfMemoryException.
@@ -468,7 +468,7 @@ namespace Il2CppDumper
                     sb.Append(HeaderConstants.HeaderV29);
                     break;
                 default:
-                    MainForm.Log($"WARNING: il2cpp version [{il2Cpp.Version}] has no .h template; skipping il2cpp.h (script.json was still written)");
+                    Logger.Log($"WARNING: il2cpp version [{il2Cpp.Version}] has no .h template; skipping il2cpp.h (script.json was still written)");
                     return;
             }
             sb.Append(headerStruct);

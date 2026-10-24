@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+	<!-- The dumper itself, shared by the GUI and the CLI -->
+	<PropertyGroup>
+		<TargetFramework>net10.0</TargetFramework>
+		<AssemblyName>Il2CppDumper.Core</AssemblyName>
+		<RootNamespace>Il2CppDumper</RootNamespace>
+		<Description>Il2CppDumper core used by Il2CppDumper GUI and CLI. This is the fork of Il2CppDumper by Perfare</Description>
+		<Copyright>Copyright © AndnixSH 2024 | Original project: Perfare 2016-2024</Copyright>
+		<Authors>AndnixSH, Perfare</Authors>
+		<Product>Il2CppDumper</Product>
+		<PackageProjectUrl>https://github.com/AndnixSH/Il2CppDumper-GUI</PackageProjectUrl>
+		<RepositoryUrl>https://github.com/AndnixSH/Il2CppDumper-GUI</RepositoryUrl>
+	</PropertyGroup>
+	<ItemGroup>
+		<PackageReference Include="Mono.Cecil" Version="0.11.6" />
+	</ItemGroup>
+	<ItemGroup>
+		<Compile Update="Resource1.Designer.cs">
+			<DesignTime>True</DesignTime>
+			<AutoGen>True</AutoGen>
+			<DependentUpon>Resource1.resx</DependentUpon>
+		</Compile>
+		<EmbeddedResource Update="Resource1.resx">
+			<Generator>ResXFileCodeGenerator</Generator>
+			<LastGenOutput>Resource1.Designer.cs</LastGenOutput>
+		</EmbeddedResource>
+	</ItemGroup>
+	<!-- Copied next to the GUI and CLI executables through the project reference -->
+	<ItemGroup>
+		<None Update="config.json" CopyToOutputDirectory="PreserveNewest" />
+		<None Update="*.py" CopyToOutputDirectory="PreserveNewest" />
+	</ItemGroup>
+</Project>

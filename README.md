@@ -25,10 +25,12 @@ Due to the variety and complexity of protection and encryption methods utilized 
 - Performance settings
 - Fast mode (skip the slow metadata-usage binary scan)
 - Support APK and IPA dump automations
+- Command-line version for scripts, batch dumps, Linux and macOS
 
 # Requirements
 - Windows 7 and above
 - .NET 10.0 Desktop Runtime (Windows): https://dotnet.microsoft.com/en-us/download/dotnet/10.0
+- Command-line version: .NET 10.0 Runtime on Windows, Linux or macOS
 
 # Download links
 
@@ -45,6 +47,49 @@ To manually select files, drop binary file and global-metadata.dat on the textbo
 To obtain CodeRegistration and MetadataRegistration, read the following tutorials:
 - https://tomorrowisnew.com/posts/Finding-CodeRegistration-and-MetadataRegistration/
 - https://il2cppdumper.com/reverse/examining-the-binary
+
+# Command-line version
+
+`Il2CppDumper` (in the `Il2CppDumper.CLI` project) is the command-line version. It uses the same dumper as the GUI, so its output is identical, and it accepts the arguments of the original Il2CppDumper:
+
+```
+Il2CppDumper <executable-file> <global-metadata> [output-directory] [options]
+Il2CppDumper <apk|apks|xapk|apkm|zip|ipa> [output-directory] [options]
+```
+
+The executable and global-metadata.dat can be given in any order. Without an output directory, the dump is written to the current directory, or to `<package name>_dumped` next to a package. Started without arguments on Windows, it asks for the files with file pickers like the original.
+
+Examples:
+
+```
+Il2CppDumper libil2cpp.so global-metadata.dat out
+Il2CppDumper game.xapk --arch arm64-v8a --scripts ghidra_with_struct,il2cpp_header_to_ghidra
+Il2CppDumper GameAssembly.dll global-metadata.dat -o out --fast --no-dummy-dll
+Il2CppDumper libil2cpp.so global-metadata.dat --code-registration 0x33beed8 --metadata-registration 0x33e58f0
+```
+
+Main options (run `Il2CppDumper --help` for all of them):
+- `-o, --output <dir>`: output directory, created if missing
+- `--arch <abi>`: ABI to dump from Android packages: `all` (default), `arm64-v8a`, `armeabi-v7a`, `x86` or `x86_64`
+- `--code-registration <hex>`, `--metadata-registration <hex>`: addresses used when auto search fails. Without them, the CLI asks for them on the console
+- `--dump-address <hex>`: base address of a libil2cpp.so dumped from memory
+- `--no-dump-cs`, `--no-struct`, `--no-dummy-dll`, `--fast`, `-j, --threads <n>`: the GUI's output and performance settings
+- `--scripts <names>`: scripts to copy into the output (default: `ida_with_struct,ida_with_struct_py3`), `all` or `none`
+- `--extract <what>`: files to copy out of packages: `binary` (default), `metadata`, `all` or `none`
+
+The other dump settings come from `config.json` next to the executable, the same file the GUI uses. The exit code is 0 on success, 1 when a dump failed and 2 for invalid arguments.
+
+To build it:
+
+```
+dotnet publish Il2CppDumper.CLI -c Release -o publish/cli
+```
+
+# Project structure
+
+- `Il2CppDumper.Core`: the dumper (executable formats, metadata, dump.cs / struct / DummyDll output, APK and IPA handling), plus `config.json` and the scripts
+- `Il2CppDumper`: the GUI (WPF, Windows only)
+- `Il2CppDumper.CLI`: the command-line version (Windows, Linux and macOS)
 
 # Outputs
 

@@ -30,43 +30,9 @@
 	<PropertyGroup>
 	  <PackageProjectUrl>https://github.com/AndnixSH/Il2CppDumper-GUI</PackageProjectUrl>
 	  <RepositoryUrl>https://github.com/AndnixSH/Il2CppDumper-GUI</RepositoryUrl>
-	  <Version>3.2.0</Version>
 	  <AssemblyVersion>$(PackageVersion)</AssemblyVersion>
 	</PropertyGroup>
 	<ItemGroup>
-		<None Update="config.json">
-			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-		</None>
-		<None Update="ghidra.py">
-			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-		</None>
-		<None Update="ghidra_wasm.py">
-			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-		</None>
-		<None Update="ghidra_with_struct.py">
-			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-		</None>
-		<None Update="hopper-py3.py">
-		  <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-		</None>
-		<None Update="ida.py">
-			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-		</None>
-		<None Update="ida_py3.py">
-			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-		</None>
-		<None Update="ida_with_struct.py">
-			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-		</None>
-		<None Update="ida_with_struct_py3.py">
-			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-		</None>
-		<None Update="il2cpp_header_to_binja.py">
-		  <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-		</None>
-		<None Update="il2cpp_header_to_ghidra.py">
-			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-		</None>
 		<None Update="Properties\Settings.settings">
 			<Generator>SettingsSingleFileGenerator</Generator>
 			<LastGenOutput>Settings.Designer.cs</LastGenOutput>
@@ -74,13 +40,12 @@
 	</ItemGroup>
 	<ItemGroup>
 		<PackageReference Include="ModernWpfUI" Version="0.9.6" />
-		<PackageReference Include="Mono.Cecil" Version="0.11.6" />
-		<PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
 		<PackageReference Include="Ookii.Dialogs.Wpf" Version="5.0.1" />
 		<PackageReference Include="PortableSettingsProvider" Version="0.2.5" />
 	</ItemGroup>
 	<ItemGroup>
-		<Compile Remove="Utils\OpenFileDialog.cs" />
+		<!-- The dumper; also brings config.json and the scripts into the output -->
+		<ProjectReference Include="..\Il2CppDumper.Core\Il2CppDumper.Core.csproj" />
 	</ItemGroup>
 	<ItemGroup>
 	  <None Remove="il2cppdumper.ico" />

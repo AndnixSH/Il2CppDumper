@@ -560,7 +560,7 @@ namespace Il2CppDumper
         {
             if (attributeRestoreErrorFirst >= 0)
             {
-                MainForm.Log($"WARNING: Failed to restore custom attributes with attributeIndex {attributeRestoreErrorFirst} - {attributeRestoreErrorLast}");
+                Logger.Log($"WARNING: Failed to restore custom attributes with attributeIndex {attributeRestoreErrorFirst} - {attributeRestoreErrorLast}");
             }
         }
 

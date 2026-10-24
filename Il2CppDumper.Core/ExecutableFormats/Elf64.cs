@@ -1,45 +1,35 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Drawing;
 using System.IO;
 using System.Linq;
 using static Il2CppDumper.ElfConstants;
 
 namespace Il2CppDumper
 {
-    public sealed class Elf : ElfBase
+    public sealed class Elf64 : ElfBase
     {
-        private Elf32_Ehdr elfHeader;
-        private Elf32_Phdr[] programSegment;
-        private Elf32_Dyn[] dynamicSection;
-        private Elf32_Sym[] symbolTable;
-        private Elf32_Shdr[] sectionTable;
-        private Elf32_Phdr pt_dynamic;
+        private Elf64_Ehdr elfHeader;
+        private Elf64_Phdr[] programSegment;
+        private Elf64_Dyn[] dynamicSection;
+        private Elf64_Sym[] symbolTable;
+        private Elf64_Shdr[] sectionTable;
+        private Elf64_Phdr pt_dynamic;
 
-        /*
-        * LDR R1, [X]
-        * ADD R0, X, X
-        * ADD R2, X, X
-        */
-        private static readonly string ARMFeatureBytes = "? 0x10 ? 0xE7 ? 0x00 ? 0xE0 ? 0x20 ? 0xE0";
-        private static readonly string X86FeatureBytes = "? 0x10 ? 0xE7 ? 0x00 ? 0xE0 ? 0x20 ? 0xE0"; //TODO
-
-        public Elf(Stream stream) : base(stream)
+        public Elf64(Stream stream) : base(stream)
         {
-            Is32Bit = true;
             Load();
         }
 
         protected override void Load()
         {
-            elfHeader = ReadClass<Elf32_Ehdr>(0);
-            programSegment = ReadClassArray<Elf32_Phdr>(elfHeader.e_phoff, elfHeader.e_phnum);
+            elfHeader = ReadClass<Elf64_Ehdr>(0);
+            programSegment = ReadClassArray<Elf64_Phdr>(elfHeader.e_phoff, elfHeader.e_phnum);
             if (IsDumped)
             {
                 FixedProgramSegment();
             }
             pt_dynamic = programSegment.First(x => x.p_type == PT_DYNAMIC);
-            dynamicSection = ReadClassArray<Elf32_Dyn>(pt_dynamic.p_offset, pt_dynamic.p_filesz / 8u);
+            dynamicSection = ReadClassArray<Elf64_Dyn>(pt_dynamic.p_offset, pt_dynamic.p_filesz / 16L);
             if (IsDumped)
             {
                 FixedDynamicSection();
@@ -50,7 +40,7 @@ namespace Il2CppDumper
                 RelocationProcessing();
                 if (CheckProtection())
                 {
-                    MainForm.Log("ERROR: This file may be protected.", Brushes.Orange);
+                    Logger.Log("ERROR: This file may be protected.");
                 }
             }
         }
@@ -60,7 +50,7 @@ namespace Il2CppDumper
             try
             {
                 var names = new List<string>();
-                sectionTable = ReadClassArray<Elf32_Shdr>(elfHeader.e_shoff, elfHeader.e_shnum);
+                sectionTable = ReadClassArray<Elf64_Shdr>(elfHeader.e_shoff, elfHeader.e_shnum);
                 var shstrndx = sectionTable[elfHeader.e_shstrndx].sh_offset;
                 foreach (var section in sectionTable)
                 {
@@ -96,57 +86,6 @@ namespace Il2CppDumper
 
         public override bool Search()
         {
-            var _GLOBAL_OFFSET_TABLE_ = dynamicSection.First(x => x.d_tag == DT_PLTGOT).d_un;
-            var execs = programSegment.Where(x => x.p_type == PT_LOAD && (x.p_flags & PF_X) == 1).ToArray();
-            var resultList = new List<int>();
-            var featureBytes = elfHeader.e_machine == EM_ARM ? ARMFeatureBytes : X86FeatureBytes;
-            foreach (var exec in execs)
-            {
-                Position = exec.p_offset;
-                var buff = ReadBytes((int)exec.p_filesz);
-                foreach (var temp in buff.Search(featureBytes))
-                {
-                    var bin = buff[temp + 2].HexToBin();
-                    if (bin[3] == '1') //LDR
-                    {
-                        resultList.Add(temp);
-                    }
-                }
-            }
-            if (resultList.Count == 1)
-            {
-                uint codeRegistration = 0;
-                uint metadataRegistration = 0;
-                var result = (uint)resultList[0];
-                if (Version < 24)
-                {
-                    if (elfHeader.e_machine == EM_ARM)
-                    {
-                        Position = result + 0x14;
-                        codeRegistration = ReadUInt32() + _GLOBAL_OFFSET_TABLE_;
-                        Position = result + 0x18;
-                        var ptr = ReadUInt32() + _GLOBAL_OFFSET_TABLE_;
-                        Position = MapVATR(ptr);
-                        metadataRegistration = ReadUInt32();
-                    }
-                }
-                else if (Version >= 24)
-                {
-                    if (elfHeader.e_machine == EM_ARM)
-                    {
-                        Position = result + 0x14;
-                        codeRegistration = ReadUInt32() + result + 0xcu + (uint)ImageBase;
-                        Position = result + 0x10;
-                        var ptr = ReadUInt32() + result + 0x8;
-                        Position = MapVATR(ptr + ImageBase);
-                        metadataRegistration = ReadUInt32();
-                    }
-                }
-                MainForm.Log("CodeRegistration : {0:x}", codeRegistration);
-                MainForm.Log("MetadataRegistration : {0:x}", metadataRegistration);
-                Init(codeRegistration, metadataRegistration);
-                return true;
-            }
             return false;
         }
 
@@ -160,9 +99,9 @@ namespace Il2CppDumper
 
         public override bool SymbolSearch()
         {
-            uint codeRegistration = 0;
-            uint metadataRegistration = 0;
-            var dynstrOffset = MapVATR(dynamicSection.First(x => x.d_tag == DT_STRTAB).d_un);
+            ulong codeRegistration = 0ul;
+            ulong metadataRegistration = 0ul;
+            ulong dynstrOffset = MapVATR(dynamicSection.First(x => x.d_tag == DT_STRTAB).d_un);
             foreach (var symbol in symbolTable)
             {
                 var name = ReadStringToNull(dynstrOffset + symbol.st_name);
@@ -178,13 +117,13 @@ namespace Il2CppDumper
             }
             if (codeRegistration > 0 && metadataRegistration > 0)
             {
-                MainForm.Log("Detected Symbol !");
-                MainForm.Log("CodeRegistration : {0:x}", codeRegistration);
-                MainForm.Log("MetadataRegistration : {0:x}", metadataRegistration);
+                Logger.Log("Detected Symbol !");
+                Logger.Log("CodeRegistration : {0:x}", codeRegistration);
+                Logger.Log("MetadataRegistration : {0:x}", metadataRegistration);
                 Init(codeRegistration, metadataRegistration);
                 return true;
             }
-            MainForm.Log("ERROR: No symbol is detected", Brushes.Orange);
+            Logger.Log("ERROR: No symbol is detected");
             return false;
         }
 
@@ -211,7 +150,7 @@ namespace Il2CppDumper
                     var symoffset = ReadUInt32();
                     var bloom_size = ReadUInt32();
                     var bloom_shift = ReadUInt32();
-                    var buckets_address = addr + 16 + (4 * bloom_size);
+                    var buckets_address = addr + 16 + (8 * bloom_size);
                     var buckets = ReadClassArray<uint>(buckets_address, nbuckets);
                     var last_symbol = buckets.Max();
                     if (last_symbol < symoffset)
@@ -233,7 +172,7 @@ namespace Il2CppDumper
                     }
                 }
                 var dynsymOffset = MapVATR(dynamicSection.First(x => x.d_tag == DT_SYMTAB).d_un);
-                symbolTable = ReadClassArray<Elf32_Sym>(dynsymOffset, symbolCount);
+                symbolTable = ReadClassArray<Elf64_Sym>(dynsymOffset, symbolCount);
             }
             catch
             {
@@ -243,27 +182,53 @@ namespace Il2CppDumper
 
         private void RelocationProcessing()
         {
-            MainForm.Log("Applying relocations...");
+            Logger.Log("Applying relocations...");
             try
             {
-                var reldynOffset = MapVATR(dynamicSection.First(x => x.d_tag == DT_REL).d_un);
-                var reldynSize = dynamicSection.First(x => x.d_tag == DT_RELSZ).d_un;
-                var relTable = ReadClassArray<Elf32_Rel>(reldynOffset, reldynSize / 8);
-                var isx86 = elfHeader.e_machine == 0x3;
-                foreach (var rel in relTable)
+                var relaOffset = MapVATR(dynamicSection.First(x => x.d_tag == DT_RELA).d_un);
+                var relaSize = dynamicSection.First(x => x.d_tag == DT_RELASZ).d_un;
+                var relaTable = ReadClassArray<Elf64_Rela>(relaOffset, relaSize / 24L);
+                foreach (var rela in relaTable)
                 {
-                    var type = rel.r_info & 0xff;
-                    var sym = rel.r_info >> 8;
-                    switch (type)
+                    // Process each relocation independently: a single malformed entry
+                    // (bad symbol index, unmapped offset) must not abort the whole
+                    // loop, otherwise later data pointers - including the il2cpp
+                    // metadataRegistration.types array - would be left unrelocated and
+                    // every type lookup would read garbage.
+                    try
                     {
-                        case R_386_32 when isx86:
-                        case R_ARM_ABS32 when !isx86:
+                        var type = rela.r_info & 0xffffffff;
+                        var sym = rela.r_info >> 32;
+                        var symValue = 0ul;
+                        var needsSym = (type == R_AARCH64_ABS64 && elfHeader.e_machine == EM_AARCH64)
+                            || (type == R_X86_64_64 && elfHeader.e_machine == EM_X86_64);
+                        if (needsSym)
+                        {
+                            if (symbolTable == null || sym >= (ulong)symbolTable.Length)
                             {
-                                var symbol = symbolTable[sym];
-                                Position = MapVATR(rel.r_offset);
-                                Write(symbol.st_value);
-                                break;
+                                continue;
                             }
+                            symValue = symbolTable[sym].st_value;
+                        }
+                        (ulong value, bool recognized) result = (type, elfHeader.e_machine) switch
+                        {
+                            (R_AARCH64_ABS64, EM_AARCH64) => (symValue + rela.r_addend, true),
+                            (R_AARCH64_RELATIVE, EM_AARCH64) => (rela.r_addend, true),
+
+                            (R_X86_64_64, EM_X86_64) => (symValue + rela.r_addend, true),
+                            (R_X86_64_RELATIVE, EM_X86_64) => (rela.r_addend, true),
+
+                            _ => (0, false)
+                        };
+                        if (result.recognized)
+                        {
+                            Position = MapVATR(rela.r_offset);
+                            Write(result.value);
+                        }
+                    }
+                    catch
+                    {
+                        // skip this relocation, keep processing the rest
                     }
                 }
             }
@@ -280,24 +245,24 @@ namespace Il2CppDumper
                 //.init_proc
                 if (dynamicSection.Any(x => x.d_tag == DT_INIT))
                 {
-                    MainForm.Log("WARNING: find .init_proc", Brushes.Yellow);
+                    Logger.Log("WARNING: find .init_proc");
                     return true;
                 }
                 //JNI_OnLoad
-                var dynstrOffset = MapVATR(dynamicSection.First(x => x.d_tag == DT_STRTAB).d_un);
+                ulong dynstrOffset = MapVATR(dynamicSection.First(x => x.d_tag == DT_STRTAB).d_un);
                 foreach (var symbol in symbolTable)
                 {
                     var name = ReadStringToNull(dynstrOffset + symbol.st_name);
                     switch (name)
                     {
                         case "JNI_OnLoad":
-                            MainForm.Log("WARNING: find JNI_OnLoad", Brushes.Yellow);
+                            Logger.Log("WARNING: find JNI_OnLoad");
                             return true;
                     }
                 }
                 if (sectionTable != null && sectionTable.Any(x => x.sh_type == SHT_LOUSER))
                 {
-                    MainForm.Log("WARNING: find SHT_LOUSER section", Brushes.Yellow);
+                    Logger.Log("WARNING: find SHT_LOUSER section");
                     return true;
                 }
             }
@@ -321,13 +286,13 @@ namespace Il2CppDumper
         {
             for (uint i = 0; i < programSegment.Length; i++)
             {
-                Position = elfHeader.e_phoff + i * 32u + 4u;
+                Position = elfHeader.e_phoff + i * 56u + 8u;
                 var phdr = programSegment[i];
                 phdr.p_offset = phdr.p_vaddr;
                 Write(phdr.p_offset);
-                phdr.p_vaddr += (uint)ImageBase;
+                phdr.p_vaddr += ImageBase;
                 Write(phdr.p_vaddr);
-                Position += 4;
+                Position += 8;
                 phdr.p_filesz = phdr.p_memsz;
                 Write(phdr.p_filesz);
             }
@@ -337,7 +302,7 @@ namespace Il2CppDumper
         {
             for (uint i = 0; i < dynamicSection.Length; i++)
             {
-                Position = pt_dynamic.p_offset + i * 8 + 4;
+                Position = pt_dynamic.p_offset + i * 16 + 8;
                 var dyn = dynamicSection[i];
                 switch (dyn.d_tag)
                 {
@@ -352,7 +317,7 @@ namespace Il2CppDumper
                     case DT_JMPREL:
                     case DT_INIT_ARRAY:
                     case DT_FINI_ARRAY:
-                        dyn.d_un += (uint)ImageBase;
+                        dyn.d_un += ImageBase;
                         Write(dyn.d_un);
                         break;
                 }
@@ -361,8 +326,8 @@ namespace Il2CppDumper
 
         public override SectionHelper GetSectionHelper(int methodCount, int typeDefinitionsCount, int imageCount)
         {
-            var dataList = new List<Elf32_Phdr>();
-            var execList = new List<Elf32_Phdr>();
+            var dataList = new List<Elf64_Phdr>();
+            var execList = new List<Elf64_Phdr>();
             foreach (var phdr in programSegment)
             {
                 if (phdr.p_memsz != 0ul)

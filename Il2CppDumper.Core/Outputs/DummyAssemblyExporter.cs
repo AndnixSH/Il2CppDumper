@@ -33,7 +33,7 @@ namespace Il2CppDumper
             var dummyDllDir = Directory.GetCurrentDirectory();
             var stopwatch = Stopwatch.StartNew();
             var dummy = new DummyAssemblyGenerator(il2CppExecutor, addToken);
-            MainForm.Log($"DummyDll: built {dummy.Assemblies.Count} assemblies in {stopwatch.Elapsed.TotalSeconds:F1}s");
+            Logger.Log($"DummyDll: built {dummy.Assemblies.Count} assemblies in {stopwatch.Elapsed.TotalSeconds:F1}s");
             enumUnderlyingTypeCache.Clear();
             long sanitizeTicks = 0, writeTicks = 0, diskTicks = 0;
             var failures = 0;
@@ -75,11 +75,11 @@ namespace Il2CppDumper
                     // Never let one malformed assembly stop the remaining
                     // DummyDll files from being generated.
                     Interlocked.Increment(ref failures);
-                    MainForm.Log($"WARNING: Failed to write {assembly.MainModule.Name}: {ex.Message}");
+                    Logger.Log($"WARNING: Failed to write {assembly.MainModule.Name}: {ex.Message}");
                 }
             });
             // Per-step times are summed over all worker threads, so they can exceed the wall time.
-            MainForm.Log($"DummyDll: wrote {dummy.Assemblies.Count - failures} files in {stopwatch.Elapsed.TotalSeconds:F1}s " +
+            Logger.Log($"DummyDll: wrote {dummy.Assemblies.Count - failures} files in {stopwatch.Elapsed.TotalSeconds:F1}s " +
                 $"({options.MaxDegreeOfParallelism} threads; thread time: sanitize {TicksToSeconds(sanitizeTicks):F1}s, " +
                 $"build {TicksToSeconds(writeTicks):F1}s, disk {TicksToSeconds(diskTicks):F1}s)");
         }

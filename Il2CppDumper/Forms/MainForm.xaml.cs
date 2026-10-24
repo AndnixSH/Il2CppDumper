@@ -1,22 +1,19 @@
 ﻿using Bluegrams.Application;
 using Il2CppDumper.Forms;
 using Il2CppDumper.Properties;
-using Il2CppDumper.Utils;
-using Newtonsoft.Json;
 using Ookii.Dialogs.Wpf;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
-using System.IO.Compression;
 using System.Linq;
 using System.Net;
 using System.Net.NetworkInformation;
 using System.Reflection;
-using System.Runtime.InteropServices;
 using System.Security.Principal;
 using System.Text;
-using System.Text.RegularExpressions;
+using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -31,17 +28,13 @@ using System.Windows.Shell;
 
 namespace Il2CppDumper
 {
-    public partial class MainForm : Window
+    public partial class MainForm : Window, IDumpPrompts
     {
-        private static Config config;
-        public static MainForm main { get; private set; }
         // Elapsed time of the running dump, shown as [mm:ss.fff] in front of every log line.
         private static readonly Stopwatch dumpTimer = new();
         string appVersion = null;
 
         string basePath = Path.GetDirectoryName(AppContext.BaseDirectory);
-        string tempPath = Path.Combine(Path.GetTempPath(), "Il2CppDumper");
-        string tempLibFile = Path.Combine(Path.GetTempPath(), "Il2CppDumper", "libil2cpp.so");
 
         //Nobody mod 32-bit iOS games so the switch has been removed, and forced 64-bit dump
         //I'll leave the codes here in case someone want to mod 32-bit games
@@ -51,16 +44,19 @@ namespace Il2CppDumper
         public MainForm()
         {
             InitializeComponent();
-            main = this;
+            // The dumper core writes its messages through Logger.
+            Logger.Writer = (text, level) => Log(text, level switch
+            {
+                LogLevel.Success => Brushes.Chartreuse,
+                LogLevel.Highlight => Brushes.PaleTurquoise,
+                LogLevel.Warning => Brushes.Yellow,
+                LogLevel.Error => Brushes.Orange,
+                _ => null,
+            });
 
             // Register the code page provider to fix error
             // System.ArgumentException: ''IBM437' is not a supported encoding name. For information on defining a custom encoding, see the documentation for the Encoding.RegisterProvider method. Arg_ParamName_Name'
             Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
-
-            //Create temp dir
-            if (Directory.Exists(tempPath))
-                Directory.Delete(tempPath, true);
-            Directory.CreateDirectory(tempPath);
 
             //Get version
             string[] versionArray = Assembly.GetExecutingAssembly().GetName().Version.ToString().Split('.');
@@ -125,565 +121,97 @@ namespace Il2CppDumper
         }
 
         #region Il2Cpp dumper
-        private bool Init(string il2cppPath, string metadataPath, out Metadata metadata, out Il2Cpp il2Cpp)
+        // Collects the dump settings on the UI thread. Returns null after logging
+        // why the dump can't start.
+        private DumpOptions CreateDumpOptions()
         {
-            string Mach_O = "2";
-
-            if (!use64bitMach_O)
-                Mach_O = "1";
-
-            Log("Read config...");
-            string configFile = Path.Combine(basePath, "config.json");
-            if (File.Exists(configFile))
+            var options = new DumpOptions
             {
-                config = JsonConvert.DeserializeObject<Config>(File.ReadAllText(configFile));
-            }
-            else
-            {
-                config = new Config();
-                Log("config.json file does not exist. Using defaults", Brushes.Yellow);
-            }
-
-            Log("Initializing metadata...");
-            var metadataBytes = File.ReadAllBytes(metadataPath);
-            metadata = new Metadata(new MemoryStream(metadataBytes));
-            Log($"Metadata Version: {metadata.Version}");
-            var unityRange = UnityVersionMap.GetUnityVersionRange(metadata.Version);
-            Log($"Detected Unity Version: {unityRange}",
-                UnityVersionMap.IsUnity6Plus(metadata.Version) ? Brushes.Lime : Brushes.LightGreen);
-            if (metadata.Version >= 38)
-            {
-                Log("Unity 6 metadata detected - using variable-width index mode", Brushes.Lime);
-            }
-            Log("Initializing il2cpp file...");
-            var il2cppBytes = File.ReadAllBytes(il2cppPath);
-            var il2cppMagic = BitConverter.ToUInt32(il2cppBytes, 0);
-            var il2CppMemory = new MemoryStream(il2cppBytes);
-            switch (il2cppMagic)
-            {
-                default:
-                    throw new NotSupportedException("ERROR: il2cpp file not supported.");
-                case 0x6D736100:
-                    var web = new WebAssembly(il2CppMemory);
-                    il2Cpp = web.CreateMemory();
-                    break;
-                case 0x304F534E:
-                    var nso = new NSO(il2CppMemory);
-                    il2Cpp = nso.UnCompress();
-                    break;
-                case 0x905A4D: //PE
-                    il2Cpp = new PE(il2CppMemory);
-                    break;
-                case 0x464c457f: //ELF
-                    if (il2cppBytes[4] == 2) //ELF64
-                    {
-                        il2Cpp = new Elf64(il2CppMemory);
-                    }
-                    else
-                    {
-                        il2Cpp = new Elf(il2CppMemory);
-                    }
-                    break;
-                case 0xCAFEBABE: //FAT Mach-O
-                case 0xBEBAFECA:
-                    var machofat = new MachoFat(new MemoryStream(il2cppBytes));
-                    for (var i = 0; i < machofat.fats.Length; i++)
-                    {
-                        var fat = machofat.fats[i];
-                        //Console.Write(fat.magic == 0xFEEDFACF ? $"{i + 1}.64bit " : $"{i + 1}.32bit ");
-                    }
-                    var index = int.Parse(Mach_O) - 1;
-                    var magic = machofat.fats[index % 2].magic;
-                    il2cppBytes = machofat.GetMacho(index % 2);
-                    il2CppMemory = new MemoryStream(il2cppBytes);
-                    if (magic == 0xFEEDFACF)
-                        goto case 0xFEEDFACF;
-                    else
-                        goto case 0xFEEDFACE;
-                case 0xFEEDFACF: // 64bit Mach-O
-                    il2Cpp = new Macho64(il2CppMemory);
-                    break;
-                case 0xFEEDFACE: // 32bit Mach-O
-                    il2Cpp = new Macho(il2CppMemory);
-                    break;
-            }
-            var version = config.ForceIl2CppVersion ? config.ForceVersion : metadata.Version;
-            il2Cpp.SetProperties(version, metadata.metadataUsagesCount, metadata);
-            Log($"Il2Cpp Version: {il2Cpp.Version}");
-            if (config.ForceDump || il2Cpp.CheckDump())
-            {
-                if (il2Cpp is ElfBase elf)
-                {
-                    bool confirm = false;
-                    ulong DumpAddr = 0;
-                    System.Windows.Application.Current.Dispatcher.Invoke((Action)delegate
-                    {
-                        InputOffsetForm form = new InputOffsetForm();
-                        if (form.ShowDialog() ?? true)
-                        {
-                            confirm = true;
-                            DumpAddr = Convert.ToUInt64(form.ReturnedOffset, 16);
-                        }
-                    });
-
-                    if (confirm)
-                    {
-                        Log("Inputted address: " + DumpAddr.ToString("X"));
-                        if (DumpAddr != 0)
-                        {
-                            il2Cpp.ImageBase = DumpAddr;
-                            il2Cpp.IsDumped = true;
-                            if (!config.NoRedirectedPointer)
-                            {
-                                elf.Reload();
-                            }
-                        }
-                    }
-                    else
-                    {
-                        il2Cpp.IsDumped = true;
-                    }
-                }
-            }
-
-            Log("Searching...");
+                GenerateDumpCs = Settings.Default.GenDumpCs,
+                GenerateStruct = Settings.Default.GenStructFiles,
+                GenerateDummyDll = Settings.Default.GenDummyDll,
+                FastMode = Settings.Default.FastMode,
+                WorkerThreads = Settings.Default.WorkerThreads,
+                MachO32 = !use64bitMach_O,
+                Abi = androArch.SelectedItem is System.Windows.Controls.ComboBoxItem { Tag: string abi } && abi != "default" ? abi : null,
+                ExtractBinary = Settings.Default.ExtBinaryChkBox,
+                ExtractMetadata = Settings.Default.ExtDatChkBox,
+                Scripts = GetSelectedScripts(),
+                ScriptsDirectory = basePath,
+            };
             try
             {
-                var flag = il2Cpp.PlusSearch(metadata.methodDefs.Count(x => x.methodIndex >= 0), metadata.typeDefs.Length, metadata.imageDefs.Length);
-                if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-                {
-                    if (!flag && il2Cpp is PE)
-                    {
-                        Log("Use custom PE loader");
-                        il2Cpp = PELoader.Load(il2cppPath);
-                        il2Cpp.SetProperties(version, metadata.metadataUsagesCount, metadata);
-                        flag = il2Cpp.PlusSearch(metadata.methodDefs.Count(x => x.methodIndex >= 0), metadata.typeDefs.Length, metadata.imageDefs.Length);
-                    }
-                }
-                if (!flag)
-                {
-                    flag = il2Cpp.Search();
-                }
-                if (!flag)
-                {
-                    flag = il2Cpp.SymbolSearch();
-                }
-                if (!flag)
-                {
-                    Log("ERROR: Can't use auto mode to process file, trying manual mode...", Brushes.Orange);
-                    if (string.IsNullOrEmpty(codeRegistrationTxtBox.Text) || string.IsNullOrEmpty(codeRegistrationTxtBox.Text))
-                    {
-                        Log("CodeRegistration or MetadataRegistration is empty", Brushes.Orange);
-                        return false;
-                    }
-                    var codeRegistration = Convert.ToUInt64(codeRegistrationTxtBox.Text, 16);
-                    var metadataRegistration = Convert.ToUInt64(metadataRegistrationTxtBox.Text, 16);
-                    il2Cpp.Init(codeRegistration, metadataRegistration);
-                }
-                if (il2Cpp.Version >= 27 && il2Cpp.IsDumped)
-                {
-                    var typeDef = metadata.typeDefs[0];
-                    var il2CppType = il2Cpp.types[typeDef.byvalTypeIndex];
-                    var typeDefinitionsOffset = metadata.Version >= 38
-                        ? (ulong)metadata.header.typeDefinitions.offset
-                        : metadata.header.typeDefinitionsOffset;
-                    metadata.ImageBase = il2CppType.data.typeHandle - typeDefinitionsOffset;
-                }
+                options.Config = ConfigLoader.Load(Path.Combine(basePath, "config.json"));
             }
-            catch (Exception ex)
+            catch (JsonException ex)
             {
-                Log("An error occurred while processing.", Brushes.Orange);
-                Log(ex.ToString(), Brushes.Orange);
-                return false;
+                Log("Can't read config.json: " + ex.Message, Brushes.Orange);
+                return null;
             }
-            return true;
+
+            // Used when the automatic search fails
+            var codeRegistration = codeRegistrationTxtBox.Text.Trim();
+            var metadataRegistration = metadataRegistrationTxtBox.Text.Trim();
+            if (codeRegistration.Length > 0 || metadataRegistration.Length > 0)
+            {
+                if (!TryParseHex(codeRegistration, out var code) || !TryParseHex(metadataRegistration, out var metadata))
+                {
+                    Log("CodeRegistration and MetadataRegistration must both be hexadecimal addresses", Brushes.Orange);
+                    return null;
+                }
+                options.CodeRegistration = code;
+                options.MetadataRegistration = metadata;
+            }
+            return options;
         }
 
-        private void Dump(Metadata metadata, Il2Cpp il2Cpp, string outputDir)
+        private static bool TryParseHex(string text, out ulong value)
         {
-            Log("Output path: " + outputDir);
-            // Read performance/output options (saved to Settings before the dump task starts).
-            var optGenDumpCs = Settings.Default.GenDumpCs;
-            var optGenStruct = Settings.Default.GenStructFiles;
-            var optGenDummyDll = Settings.Default.GenDummyDll;
-            var optFastMode = Settings.Default.FastMode;
-            var optWorkerThreads = Settings.Default.WorkerThreads;
-            var executor = new Il2CppExecutor(metadata, il2Cpp);
-            if (optGenDumpCs)
-            {
-                Log("Dumping... ");
-                var decompiler = new Il2CppDecompiler(executor);
-                decompiler.Decompile(config, outputDir);
-                Log("Done!", Brushes.Chartreuse);
-            }
-            else
-            {
-                Log("Skipping dump.cs (disabled in settings)", Brushes.Khaki);
-            }
-            if (config.GenerateStruct && optGenStruct)
-            {
-                Log("Generate struct...");
-                try
-                {
-                    var scriptGenerator = new StructGenerator(executor);
-                    scriptGenerator.WriteScript(outputDir, optFastMode, optWorkerThreads);
-                    Log("Done!", Brushes.Chartreuse);
-                }
-                catch (Exception ex)
-                {
-                    Log("There was an error trying to generate struct: " + ex.Message, Brushes.Orange);
-                    Log(ex.ToString(), Brushes.Orange);
-                }
-            }
-            if (config.GenerateDummyDll && optGenDummyDll)
-            {
-                try
-                {
-                    Log("Generating dummy dll...");
-                    DummyAssemblyExporter.Export(executor, outputDir, config.DummyDllAddToken, optWorkerThreads);
-                    Log("Done!", Brushes.Chartreuse);
-                }
-                catch (Exception ex)
-                {
-                    Log("There was an error trying to generate dummy dll: " + ex.Message, Brushes.Orange);
-                    Log(ex.ToString(), Brushes.Orange);
-                }
-                Directory.SetCurrentDirectory(basePath); //Fix read-only directory permission
-            }
+            if (text.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+                text = text[2..];
+            return ulong.TryParse(text, NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out value);
         }
 
-        private void Dumper(string file, string metadataPath, string outputPath)
+        private static List<string> GetSelectedScripts()
         {
-            try
+            var scripts = new List<(bool Selected, string FileName)>
             {
-                if (Init(file, metadataPath, out var metadata, out var il2Cpp))
-                {
-                    Dump(metadata, il2Cpp, outputPath);
-                    CopyScripts(outputPath);
-                }
-            }
-            catch (Exception ex)
-            {
-                Log(ex.ToString() + "\n", Brushes.Orange);
-            }
+                (Settings.Default.ghidra, "ghidra.py"),
+                (Settings.Default.ghidra_wasm, "ghidra_wasm.py"),
+                (Settings.Default.ghidra_with_struct, "ghidra_with_struct.py"),
+                (Settings.Default.hopper, "hopper-py3.py"),
+                (Settings.Default.ida, "ida.py"),
+                (Settings.Default.ida_py3, "ida_py3.py"),
+                (Settings.Default.ida_with_struct, "ida_with_struct.py"),
+                (Settings.Default.ida_with_struct_py3, "ida_with_struct_py3.py"),
+                (Settings.Default.il2cpp_header_to_binja, "il2cpp_header_to_binja.py"),
+                (Settings.Default.il2cpp_header_to_ghidra, "il2cpp_header_to_ghidra.py")
+            };
+            return scripts.Where(x => x.Selected).Select(x => x.FileName).ToList();
         }
-        #endregion
 
-        #region Auto Dump
-        private async Task IPADump(string file, string outputPath)
+        // IDumpPrompts: called from the dump task
+        public ulong AskDumpAddress()
         {
-            await Task.Factory.StartNew(() =>
+            ulong address = 0;
+            Dispatcher.Invoke(() =>
             {
-                using (ZipArchive archive = ZipFile.OpenRead(file))
+                var form = new InputOffsetForm();
+                form.ShowDialog();
+                if (!string.IsNullOrEmpty(form.ReturnedOffset) && !TryParseHex(form.ReturnedOffset, out address))
                 {
-                    var ipaBinaryFolder = archive.Entries.FirstOrDefault(f =>
-                        f.FullName.StartsWith("Payload/") &&
-                        f.FullName.Contains(".app/") &&
-                        f.FullName.Count(x => x == '/') == 2);
-
-                    if (ipaBinaryFolder != null)
-                    {
-                        Regex myRegex3 = new Regex(@"(?<=Payload\/)(.*?)(?=.app\/)", RegexOptions.None);
-                        Match match = myRegex3.Match(ipaBinaryFolder.FullName);
-
-                        var ipaBinaryName = match.ToString();
-                        var metadataFile = archive.Entries.FirstOrDefault(f => f.FullName == $"Payload/{ipaBinaryName}.app/Data/Managed/Metadata/global-metadata.dat");
-                        var frameworkFile = archive.Entries.FirstOrDefault(f => f.FullName == $"Payload/{ipaBinaryName}.app/Frameworks/UnityFramework.framework/UnityFramework");
-                        var binaryFile = archive.Entries.FirstOrDefault(f => f.FullName == $"Payload/{ipaBinaryName}.app/{ipaBinaryName}");
-
-                        if (metadataFile != null)
-                        {
-                            if (frameworkFile != null)
-                                binaryFile = frameworkFile;
-
-                            Directory.CreateDirectory(outputPath);
-
-                            string tempPath = Path.Combine(Path.GetTempPath(), "IPADump");
-                            Directory.CreateDirectory(tempPath);
-
-                            if (Settings.Default.ExtDatChkBox)
-                                ZipUtils.ExtractFile(metadataFile, outputPath);
-                            ZipUtils.ExtractFile(metadataFile, tempPath);
-
-                            if (use64bitMach_O)
-                            {
-                                Log("> Dumping ARM64", Brushes.PaleTurquoise);
-                                if (Settings.Default.ExtBinaryChkBox)
-                                    ZipUtils.ExtractFile(binaryFile, outputPath);
-                                ZipUtils.ExtractFile(binaryFile, tempPath);
-                                Dumper(Path.Combine(tempPath, Path.GetFileName(binaryFile.FullName)), Path.Combine(tempPath, "global-metadata.dat"), outputPath);
-                            }
-                            else
-                            {
-                                Log("> Dumping ARMv7", Brushes.PaleTurquoise);
-                                if (Settings.Default.ExtBinaryChkBox)
-                                    ZipUtils.ExtractFile(binaryFile, outputPath);
-                                ZipUtils.ExtractFile(binaryFile, tempPath);
-                                Dumper(Path.Combine(tempPath, Path.GetFileName(binaryFile.FullName)), Path.Combine(tempPath, "global-metadata.dat"), outputPath);
-                            }
-                        }
-                        else
-                        {
-                            Log("This IPA does not contain an IL2CPP application", Brushes.Yellow);
-                        }
-                    }
-                    else
-                    {
-                        Log("Failed to extract required file. Please extract the files manually", Brushes.Yellow);
-                    }
+                    Log($"{form.ReturnedOffset} is not a valid address, processing it as a normal file", Brushes.Yellow);
+                    address = 0;
                 }
             });
+            return address;
         }
 
-        private async Task APKDump(string file, string outputPath)
+        public bool TryAskRegistrations(out ulong codeRegistration, out ulong metadataRegistration)
         {
-            Log($"Opening {file}");
-
-            Debug.WriteLine("arch: " + Settings.Default.AndroArch);
-            bool dumpArm64 = true, dumpArmv7 = true, dumpx86 = true, dumpx86_64 = true;
-            int archIndex = Settings.Default.AndroArch;
-            if (archIndex != 0)
-            {
-                dumpArm64 = archIndex == 1;
-                dumpArmv7 = archIndex == 2;
-                dumpx86 = archIndex == 3;
-                dumpx86_64 = archIndex == 4;
-            }
-
-            await Task.Factory.StartNew(() =>
-            {
-                using (ZipArchive archive = ZipFile.OpenRead(file))
-                {
-                    Log("Extracting files");
-
-                    var binaryFile = archive.Entries.FirstOrDefault(f => f.FullName.Contains("libil2cpp.so"));
-                    var metadataPath = archive.Entries.FirstOrDefault(f => f.FullName.Contains("assets/bin/Data/Managed/Resources/"));
-                    var metadataFile = archive.Entries.FirstOrDefault(f => f.FullName == "assets/bin/Data/Managed/Metadata/global-metadata.dat");
-
-                    if (binaryFile == null && metadataPath != null)
-                    {
-                        Log("This APK does not contain lib folder. APK has been split", Brushes.Yellow);
-                        return;
-                    }
-                    else if (binaryFile != null && metadataPath == null)
-                    {
-                        Log("This APK is an il2cpp game but does not contain global-metadata.dat. It may be protected or APK has been split", Brushes.Yellow);
-                        return;
-                    }
-
-                    if (metadataFile != null)
-                    {
-                        Directory.CreateDirectory(outputPath);
-
-                        if (Settings.Default.ExtDatChkBox)
-                            ZipUtils.ExtractFile(metadataFile, outputPath);
-                        ZipUtils.ExtractFile(metadataFile, tempPath);
-
-                        var libabi = new List<string> { "armeabi-v7a", "arm64-v8a", "x86", "x86-64" };
-                        foreach (string abi in libabi)
-                        {
-                            bool archMatch = (dumpArm64 && abi == "arm64-v8a") ||
-                                             (dumpArmv7 && abi == "armeabi-v7a") ||
-                                             (dumpx86_64 && abi == "x86-64") ||
-                                             (dumpx86 && abi == "x86");
-
-                            foreach (var entry in archive.Entries)
-                            {
-                                if (entry.FullName.Equals($"lib/{abi}/libil2cpp.so") && archMatch)
-                                {
-                                    Debug.WriteLine($"File: lib/{abi}/libil2cpp.so");
-                                    Log($"> Dumping {abi}", Brushes.PaleTurquoise);
-                                    string archPath = Path.Combine(outputPath, abi);
-
-                                    Directory.CreateDirectory(archPath);
-                                    if (Settings.Default.ExtBinaryChkBox)
-                                        ZipUtils.ExtractFile(entry, archPath);
-                                    ZipUtils.ExtractFile(entry, tempPath);
-                                    Dumper(tempLibFile, Path.Combine(tempPath, "global-metadata.dat"), archPath + "\\");
-                                }
-                            }
-                        }
-                    }
-                    else
-                    {
-                        Log("This APK does not contain an IL2CPP application", Brushes.Yellow);
-                    }
-                }
-            });
-        }
-
-        private async Task SplitAPKDump(string file, string outputPath)
-        {
-            await Task.Factory.StartNew(() =>
-            {
-                bool dumpArm64 = true, dumpArmv7 = true, dumpx86 = true, dumpx86_64 = true;
-                int archIndex = Settings.Default.AndroArch;
-                if (archIndex != 0)
-                {
-                    dumpArm64 = archIndex == 1;
-                    dumpArmv7 = archIndex == 2;
-                    dumpx86 = archIndex == 3;
-                    dumpx86_64 = archIndex == 4;
-                }
-
-                bool metadataFound = false;
-
-                Log("Extracting files");
-
-                using (ZipArchive archive = ZipFile.OpenRead(file))
-                {
-                    var obbEntriesOuter = archive.Entries
-                      .Where(e => e.FullName.EndsWith(".obb", StringComparison.OrdinalIgnoreCase))
-                      .ToList();
-                    bool hasObbFile = false;
-                    if (obbEntriesOuter.Count > 0)
-                    {
-                        foreach (var obbEntry in obbEntriesOuter)
-                        {
-                            hasObbFile = true;
-                        }
-                    }
-
-                    if (hasObbFile)
-                    {
-                        Log("OBB file detected. Extracting single APK file...", Brushes.Yellow);
-                        foreach (var entryApk in archive.Entries)
-                        {
-                            if (entryApk.FullName.EndsWith(".apk"))
-                            {
-                                var apkFile = Path.Combine(tempPath, entryApk.FullName);
-
-                                Log($"Extracting {entryApk.FullName} to {apkFile}");
-                                ZipUtils.ExtractFile(entryApk, tempPath);
-
-                                _ = APKDump(apkFile, outputPath);
-                                return;
-                            }
-                        }
-                    }
-
-                    foreach (var entryApks in archive.Entries)
-                    {
-                        Debug.WriteLine($"Files: {entryApks.FullName}");
-
-                        if (!entryApks.FullName.StartsWith("config.") && entryApks.FullName.EndsWith(".apk") && !metadataFound)
-                        {
-                            Log($"Checking {entryApks.FullName}");
-
-                            var apkFile = Path.Combine(tempPath, entryApks.FullName);
-                            ZipUtils.ExtractFile(entryApks, tempPath);
-
-                            using (ZipArchive entryBase = ZipFile.OpenRead(apkFile))
-                            {
-                                var metadataFile = entryBase.Entries.FirstOrDefault(f => f.FullName == "assets/bin/Data/Managed/Metadata/global-metadata.dat");
-
-                                if (metadataFile == null)
-                                {
-                                    Log($"No global-metadata.dat found in {entryApks.FullName}", Brushes.Yellow);
-                                }
-                                else
-                                {
-                                    Log($"Found global-metadata.dat from {entryApks.FullName}. Extracting", Brushes.Chartreuse);
-                                    metadataFound = true;
-                                    Directory.CreateDirectory(outputPath);
-
-                                    if (Settings.Default.ExtDatChkBox)
-                                        ZipUtils.ExtractFile(metadataFile, outputPath);
-                                    ZipUtils.ExtractFile(metadataFile, tempPath);
-                                }
-                            }
-                        }
-
-                        var libabi = new List<string> { "armeabi_v7a", "arm64_v8a", "x86", "x86_64" };
-                        foreach (string abi in libabi)
-                        {
-                            bool archMatch = (dumpArm64 && abi == "arm64_v8a") ||
-                                             (dumpArmv7 && abi == "armeabi_v7a") ||
-                                             (dumpx86_64 && abi == "x86_64") ||
-                                             (dumpx86 && abi == "x86");
-
-                            if (entryApks.FullName.Contains(abi) && entryApks.FullName.EndsWith(".apk") && archMatch)
-                            {
-                                Log($"Checking {entryApks.FullName}");
-
-                                var apkFile = Path.Combine(tempPath, entryApks.FullName);
-                                ZipUtils.ExtractFile(entryApks, tempPath);
-
-                                using (ZipArchive entryBase = ZipFile.OpenRead(apkFile))
-                                {
-                                    var binaryFile = entryBase.Entries.FirstOrDefault(f => f.FullName.Contains("libil2cpp.so"));
-
-                                    if (binaryFile == null)
-                                    {
-                                        Log($"The split APK {entryApks.FullName} does not contain libil2cpp.so folder", Brushes.Yellow);
-                                        return;
-                                    }
-                                    else
-                                    {
-                                        Directory.CreateDirectory(outputPath);
-
-                                        foreach (var entry in entryBase.Entries)
-                                        {
-                                            if (entry.FullName.Contains("libil2cpp.so"))
-                                            {
-                                                Log($"Found libil2cpp.so from {entry.FullName}. Dumping", Brushes.Chartreuse);
-                                                string archPath = Path.Combine(outputPath, abi);
-
-                                                Directory.CreateDirectory(archPath);
-                                                if (Settings.Default.ExtBinaryChkBox)
-                                                    ZipUtils.ExtractFile(entry, archPath);
-                                                ZipUtils.ExtractFile(entry, tempPath);
-                                                Dumper(tempLibFile, Path.Combine(tempPath, "global-metadata.dat"), archPath + "\\");
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }).ConfigureAwait(false);
-        }
-
-        //Copy python scripts after dump successfully
-        private void CopyScripts(string outputPath)
-        {
-            try
-            {
-                var fileSettings = new List<(bool Setting, string FileName)>
-                {
-                    (Settings.Default.ghidra, "ghidra.py"),
-                    (Settings.Default.ghidra_wasm, "ghidra_wasm.py"),
-                    (Settings.Default.ghidra_with_struct, "ghidra_with_struct.py"),
-                    (Settings.Default.hopper, "hopper-py3.py"),
-                    (Settings.Default.ida, "ida.py"),
-                    (Settings.Default.ida_py3, "ida_py3.py"),
-                    (Settings.Default.ida_with_struct, "ida_with_struct.py"),
-                    (Settings.Default.ida_with_struct_py3, "ida_with_struct_py3.py"),
-                    (Settings.Default.il2cpp_header_to_binja, "il2cpp_header_to_binja.py"),
-                    (Settings.Default.il2cpp_header_to_ghidra, "il2cpp_header_to_ghidra.py")
-                };
-
-                foreach (var fileSetting in fileSettings)
-                {
-                    if (fileSetting.Setting)
-                    {
-                        if (File.Exists(Path.Combine(basePath, fileSetting.FileName)))
-                        {
-                            File.Copy(Path.Combine(basePath, fileSetting.FileName), outputPath + fileSetting.FileName, true);
-                            Log($"Copied {fileSetting.FileName}");
-                        }
-                        else
-                        {
-                            Log($"{fileSetting.FileName} does not exist", Brushes.Yellow);
-                        }
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Log(ex.ToString(), Brushes.Red);
-            }
+            Log("Enter CodeRegistration and MetadataRegistration and press Start again", Brushes.Orange);
+            codeRegistration = metadataRegistration = 0;
+            return false;
         }
         #endregion
 
@@ -726,16 +254,6 @@ namespace Il2CppDumper
         #endregion
 
         #region Logging
-        public static void Log(string text)
-        {
-            main.Log(text);
-        }
-
-        public static void Log(string text, object text2)
-        {
-            main.Log(string.Format(text, text2));
-        }
-
         //Color list /*http://www.flounder.com/csharp_color_table.htm*/
         public void Log(string text, SolidColorBrush color = null)
         {
@@ -864,9 +382,6 @@ namespace Il2CppDumper
         private void Window_Closed(object sender, EventArgs e)
         {
             SaveConfig();
-
-            if (Directory.Exists(tempPath))
-                Directory.Delete(tempPath, true);
         }
 
         private void LogBox_TextChanged(object sender, TextChangedEventArgs e)
@@ -915,19 +430,17 @@ namespace Il2CppDumper
                 return;
             }
 
+            var options = CreateDumpOptions();
+            if (options == null)
+                return;
+
             ActionButtonsEnabled = false;
 
             string binFile = binFileTxtBox.Text;
             string datFile = datFileTxtBox.Text;
             string outputPath = outputTxtBox.Text;
 
-            await Task.Factory.StartNew(() =>
-            {
-                DirectoryUtils.Delete(tempPath);
-                Directory.CreateDirectory(tempPath);
-
-                Dumper(binFile, datFile, outputPath);
-            });
+            await Task.Run(() => new DumpRunner(options, this).Run(binFile, datFile, outputPath));
 
             dumpTimer.Stop();
             ActionButtonsEnabled = true;
@@ -1080,35 +593,33 @@ namespace Il2CppDumper
             LogBox.Document.Blocks.Clear();
             dumpTimer.Restart();
             SaveConfig();
-            string[] files = e.GetFilesDrop();
+            var options = CreateDumpOptions();
+            string[] files = options == null ? Array.Empty<string>() : e.GetFilesDrop();
             foreach (var file in files)
             {
                 string outputPath;
                 if (Settings.Default.AutoSetDir)
                 {
-                    outputPath = Path.GetDirectoryName(file) + "\\" + Path.GetFileNameWithoutExtension(file) + "_dumped\\";
+                    outputPath = Path.Combine(Path.GetDirectoryName(file), Path.GetFileNameWithoutExtension(file) + "_dumped");
                 }
                 else
                 {
-                    outputPath = outputTxtBox.Text + Path.GetFileNameWithoutExtension(file) + "_dumped\\";
+                    outputPath = Path.Combine(outputTxtBox.Text, Path.GetFileNameWithoutExtension(file) + "_dumped");
                 }
 
-                switch (Path.GetExtension(file))
+                switch (Path.GetExtension(file).ToLowerInvariant())
                 {
                     case ".apk":
-                        await APKDump(file, outputPath);
-                        break;
                     case ".apks":
                     case ".xapk":
                     case ".apkm":
                     case ".zip":
-                        await SplitAPKDump(file, outputPath);
-                        break;
                     case ".ipa":
-                        await IPADump(file, outputPath);
+                        await Task.Run(() => new PackageDumper(options, new DumpRunner(options, this)).Run(file, outputPath));
                         break;
                     default:
-                        return;
+                        Log($"{Path.GetFileName(file)} is not an APK, APKS, XAPK, APKM, ZIP or IPA file", Brushes.Yellow);
+                        continue;
                 }
 
                 if (Settings.Default.AutoSetDir)

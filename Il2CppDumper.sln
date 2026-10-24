@@ -5,6 +5,10 @@ VisualStudioVersion = 17.5.33627.172
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Il2CppDumper", "Il2CppDumper\Il2CppDumper.csproj", "{B6DD4E87-D002-40B0-9F1E-94DE7D71D497}"
 EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Il2CppDumper.CLI", "Il2CppDumper.CLI\Il2CppDumper.CLI.csproj", "{05938656-17EA-4CCA-B119-FBCC35DB750F}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Il2CppDumper.Core", "Il2CppDumper.Core\Il2CppDumper.Core.csproj", "{3D1A162A-7D17-4421-9C16-87F25AB43542}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -15,6 +19,14 @@ Global
 		{B6DD4E87-D002-40B0-9F1E-94DE7D71D497}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{B6DD4E87-D002-40B0-9F1E-94DE7D71D497}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{B6DD4E87-D002-40B0-9F1E-94DE7D71D497}.Release|Any CPU.Build.0 = Release|Any CPU
+		{05938656-17EA-4CCA-B119-FBCC35DB750F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{05938656-17EA-4CCA-B119-FBCC35DB750F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{05938656-17EA-4CCA-B119-FBCC35DB750F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{05938656-17EA-4CCA-B119-FBCC35DB750F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3D1A162A-7D17-4421-9C16-87F25AB43542}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3D1A162A-7D17-4421-9C16-87F25AB43542}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3D1A162A-7D17-4421-9C16-87F25AB43542}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3D1A162A-7D17-4421-9C16-87F25AB43542}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
