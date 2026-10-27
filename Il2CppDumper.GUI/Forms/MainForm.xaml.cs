@@ -235,7 +235,7 @@ namespace Il2CppDumper
                             if (latestVersion > currentVersion)
                             {
                                 Log("A new version is available: " + remoteVersion, Brushes.Lime);
-                                Log("https://github.com/AndnixSH/Il2CppDumper-GUI/releases", Brushes.Lime);
+                                Log("https://github.com/AndnixSH/Il2CppDumper/releases", Brushes.Lime);
                             }
                         }
                     }

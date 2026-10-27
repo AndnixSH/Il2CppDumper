@@ -13,8 +13,8 @@
 		<Title>Il2CppDumper CLI</Title>
 		<Authors>AndnixSH, Perfare</Authors>
 		<Product>Il2CppDumper</Product>
-		<PackageProjectUrl>https://github.com/AndnixSH/Il2CppDumper-GUI</PackageProjectUrl>
-		<RepositoryUrl>https://github.com/AndnixSH/Il2CppDumper-GUI</RepositoryUrl>
+		<PackageProjectUrl>https://github.com/AndnixSH/Il2CppDumper</PackageProjectUrl>
+		<RepositoryUrl>https://github.com/AndnixSH/Il2CppDumper</RepositoryUrl>
 	</PropertyGroup>
 	<ItemGroup>
 		<ProjectReference Include="..\Il2CppDumper.Core\Il2CppDumper.Core.csproj" />

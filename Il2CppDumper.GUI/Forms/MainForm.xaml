@@ -351,9 +351,9 @@
                     <TextBlock HorizontalAlignment="Left">
 
                        
-            <Hyperlink NavigateUri="https://github.com/AndnixSH/Il2CppDumper-GUI"
+            <Hyperlink NavigateUri="https://github.com/AndnixSH/Il2CppDumper"
                         RequestNavigate="Hyperlink_RequestNavigate">
-                https://github.com/AndnixSH/Il2CppDumper-GUI
+                https://github.com/AndnixSH/Il2CppDumper
             </Hyperlink>
                     </TextBlock>
                 </ui:SimpleStackPanel>

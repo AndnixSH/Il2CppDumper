@@ -9,8 +9,8 @@
 		<Copyright>Copyright © AndnixSH 2024 | Original project: Perfare 2016-2024</Copyright>
 		<Authors>AndnixSH, Perfare</Authors>
 		<Product>Il2CppDumper</Product>
-		<PackageProjectUrl>https://github.com/AndnixSH/Il2CppDumper-GUI</PackageProjectUrl>
-		<RepositoryUrl>https://github.com/AndnixSH/Il2CppDumper-GUI</RepositoryUrl>
+		<PackageProjectUrl>https://github.com/AndnixSH/Il2CppDumper</PackageProjectUrl>
+		<RepositoryUrl>https://github.com/AndnixSH/Il2CppDumper</RepositoryUrl>
 	</PropertyGroup>
 	<ItemGroup>
 		<PackageReference Include="Mono.Cecil" Version="0.11.6" />
