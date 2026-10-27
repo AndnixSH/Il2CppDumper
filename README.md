@@ -57,7 +57,7 @@ Il2CppDumper <executable-file> <global-metadata> [output-directory] [options]
 Il2CppDumper <apk|apks|xapk|apkm|zip|ipa> [output-directory] [options]
 ```
 
-The executable and global-metadata.dat can be given in any order. Without an output directory, the dump is written to the current directory, or to `<package name>_dumped` next to a package. Started without arguments on Windows, it asks for the files with file pickers like the original.
+The executable and global-metadata.dat can be given in any order. Without an output directory, the dump is written to an `output` folder in the current directory, or to `<package name>_dumped` next to a package. Started without arguments on Windows, it asks for the files with file pickers like the original.
 
 Examples:
 

@@ -250,7 +250,8 @@ namespace Il2CppDumper
 
 The executable and global-metadata.dat can be given in any order; the metadata
 is recognized by its header. Without an output directory the dump is written to
-the current directory, or to <package name>_dumped next to a package.
+an output folder in the current directory, or to <package name>_dumped next to
+a package.
 
 Options:
   -o, --output <dir>               Output directory (created if missing)

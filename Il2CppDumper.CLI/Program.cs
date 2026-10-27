@@ -171,7 +171,8 @@ namespace Il2CppDumper
             }
             else
             {
-                ok = runner.Run(il2cppPath, metadataPath, outputDir ?? Directory.GetCurrentDirectory());
+                // Not the current directory itself: that is the exe's folder when it is double-clicked.
+                ok = runner.Run(il2cppPath, metadataPath, outputDir ?? Path.Combine(Directory.GetCurrentDirectory(), "output"));
             }
             if (ok)
             {
